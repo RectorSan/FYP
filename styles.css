@@ -29,7 +29,28 @@ body { margin: 0; }
   width: 18px;
   height: 58px;
   background: #f3f4f6;
-  transform: skewX(-16deg);
+  border-radius: 12px 12px 6px 6px;
+}
+
+.logo-pillar::before,
+.logo-pillar::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 42px;
+  height: 14px;
+  background: #f3f4f6;
+  border-radius: 12px;
+}
+
+.logo-pillar::before {
+  top: -8px;
+}
+
+.logo-pillar::after {
+  bottom: -8px;
+};
 }
 
 .logo-pillar.left { left: 8px; }
