@@ -57,8 +57,11 @@ const showSignupBtn = $("showSignupBtn");
 
 function loadDB() {
   const db = JSON.parse(localStorage.getItem(DB_KEY) || "null") || structuredClone(seed);
+  if (!db.users) db.users = [];
   if (!db.catalog) db.catalog = [];
   if (!db.bookings) db.bookings = [];
+  if (!db.reviews) db.reviews = [];
+  if (!db.transactions) db.transactions = [];
   return db;
 }
 function saveDB(db) { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
