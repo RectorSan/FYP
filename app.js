@@ -424,10 +424,13 @@ function renderProvider(db, user) {
             ${b.status === "Accepted" ? `<button data-status="Job Started" data-booking="${b.id}">Job started</button>` : ""}
             ${b.status === "Job Started" ? `<button data-status="Job Finished" data-booking="${b.id}">Job finished</button>` : ""}
             ${["Job Finished", "Awaiting Delivery Confirmation"].includes(b.status) && !b.sellerDelivered ? `<button data-status="SellerDelivered" data-booking="${b.id}">Mark delivered (seller)</button>` : ""}
-            <label>Counter offer (optional)
-              <input data-counter="${b.id}" type="number" min="1" placeholder="Enter counter amount" />
+            ${["Pending", "Countered"].includes(b.status)
+              ? `<label>Renegotiate before accepting (₦${Number(b.minPrice || 0).toLocaleString()} - ₦${Number(b.maxPrice || 0).toLocaleString()})
+              <input data-counter-slider="${b.id}" type="range" min="${Number(b.minPrice || 0)}" max="${Number(b.maxPrice || 0)}" value="${Math.min(Math.max(Number(b.offerPrice || 0), Number(b.minPrice || 0)), Number(b.maxPrice || 0))}" step="1000" />
+              <small>Selected counter: ₦<span data-counter-value="${b.id}">${Math.min(Math.max(Number(b.offerPrice || 0), Number(b.minPrice || 0)), Number(b.maxPrice || 0)).toLocaleString()}</span></small>
             </label>
-            ${["Pending", "Countered"].includes(b.status) ? `<button class="ghost" data-status="Countered" data-booking="${b.id}">Send counter offer</button>` : ""}
+            <button class="ghost" data-status="Countered" data-booking="${b.id}">Send counter offer</button>`
+              : ""}
             <label>Chat with buyer
               <input data-chat="${b.id}" placeholder="Type a message" />
             </label>
@@ -484,7 +487,11 @@ function renderProvider(db, user) {
       const nextStatus = btn.getAttribute("data-status");
 
       if (nextStatus === "Countered") {
-        const counterInput = target.querySelector(`[data-counter="${booking.id}"]`);
+        if (!["Pending", "Countered"].includes(booking.status)) {
+          alert("You can only renegotiate before accepting this order.");
+          return;
+        }
+        const counterInput = target.querySelector(`[data-counter-slider="${booking.id}"]`);
         const counterAmount = Number(counterInput?.value || 0);
         if (!counterAmount) {
           alert("Enter a counter amount first.");
@@ -520,6 +527,15 @@ function renderProvider(db, user) {
       if (booking.status === "Accepted") user.acceptedJobs = (user.acceptedJobs || 0) + 1;
       saveDB(db);
       render();
+    };
+  });
+
+  target.querySelectorAll("[data-counter-slider]").forEach((slider) => {
+    slider.oninput = () => {
+      const bookingId = slider.getAttribute("data-counter-slider");
+      const valueNode = target.querySelector(`[data-counter-value="${bookingId}"]`);
+      if (!valueNode) return;
+      valueNode.textContent = Number(slider.value || 0).toLocaleString();
     };
   });
 
