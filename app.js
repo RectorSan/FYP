@@ -54,6 +54,7 @@ const roleSelect = $("roleSelect");
 const providerFields = $("providerFields");
 const showLoginBtn = $("showLoginBtn");
 const showSignupBtn = $("showSignupBtn");
+const notificationPanel = $("notificationPanel");
 
 function loadDB() {
   const db = JSON.parse(localStorage.getItem(DB_KEY) || "null") || structuredClone(seed);
@@ -123,6 +124,23 @@ function addCustomerNotification(db, customerId, text) {
     at: new Date().toISOString(),
     read: false,
   });
+}
+
+function formatNotificationTime(isoText) {
+  if (!isoText) return "";
+  const stamp = new Date(isoText);
+  if (Number.isNaN(stamp.getTime())) return "";
+  return stamp.toLocaleString();
+}
+
+function closeNotificationPanel() {
+  if (!notificationPanel) return;
+  notificationPanel.classList.add("hidden");
+  notificationPanel.innerHTML = "";
+}
+
+function ensureNotificationPanelClosed() {
+  closeNotificationPanel();
 }
 
 function ensureDateTimePickerExperience(dateInput, timeInput) {
@@ -430,18 +448,29 @@ function renderCustomer(db, user) {
 
   $("profileBtn").onclick = () => alert(`Logged in as ${user.name}`);
   $("notifyBtn").onclick = () => {
-    const unreadCount = getCustomerUnreadChatCount(db, user.id);
-    if (!unreadCount) {
-      alert("You are all caught up.");
+    if (!notificationPanel) return;
+
+    const isOpen = !notificationPanel.classList.contains("hidden");
+    if (isOpen) {
+      closeNotificationPanel();
       return;
     }
 
-    const latestUpdates = db.customerNotifications
+    const allUpdates = db.customerNotifications
       .filter((notification) => notification.customerId === user.id)
-      .slice(-8)
-      .reverse()
-      .map((notification) => `• ${notification.text}`)
-      .join("\n");
+      .slice()
+      .reverse();
+
+    if (!allUpdates.length) {
+      notificationPanel.innerHTML = '<p class="muted">You are all caught up.</p>';
+      notificationPanel.classList.remove("hidden");
+      return;
+    }
+
+    notificationPanel.innerHTML = allUpdates
+      .map((notification) => `<article class="notification-item ${notification.read ? "" : "unread"}"><p>${notification.text}</p><p class="notification-time">${formatNotificationTime(notification.at)}</p></article>`)
+      .join("");
+    notificationPanel.classList.remove("hidden");
 
     db.customerNotifications
       .filter((notification) => notification.customerId === user.id)
@@ -449,8 +478,9 @@ function renderCustomer(db, user) {
         notification.read = true;
       });
     saveDB(db);
-    alert(`You have ${unreadCount} new update${unreadCount > 1 ? "s" : ""}.\n\n${latestUpdates}`);
-    render();
+    const notifyBtn = $("notifyBtn");
+    notifyBtn.classList.remove("has-alert");
+    notifyBtn.setAttribute("aria-label", "Notifications");
   };
   searchInput.oninput = () => viewMode === "marketplace" && renderView();
   categorySelect.onchange = () => viewMode === "marketplace" && renderView();
@@ -721,6 +751,7 @@ function render() {
     $("marketControls").classList.add("hidden");
     $("profileBtn").classList.add("hidden");
     $("notifyBtn").classList.add("hidden");
+    ensureNotificationPanelClosed();
     return;
   }
 
@@ -742,6 +773,7 @@ function render() {
   marketControls.classList.toggle("hidden", !isCustomer);
   profileBtn.classList.toggle("hidden", !isCustomer);
   notifyBtn.classList.toggle("hidden", !isCustomer);
+  if (!isCustomer) ensureNotificationPanelClosed();
   const unreadCount = isCustomer ? getCustomerUnreadChatCount(db, user.id) : 0;
   notifyBtn.classList.toggle("has-alert", unreadCount > 0);
   notifyBtn.setAttribute("aria-label", unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications");
@@ -845,6 +877,14 @@ logoutBtn.onclick = () => {
   switchAuthView("login");
   render();
 };
+
+
+document.addEventListener("click", (event) => {
+  const notifyBtn = $("notifyBtn");
+  if (!notificationPanel || notificationPanel.classList.contains("hidden")) return;
+  if (notificationPanel.contains(event.target) || notifyBtn.contains(event.target)) return;
+  closeNotificationPanel();
+});
 
 switchAuthView("login");
 render();
