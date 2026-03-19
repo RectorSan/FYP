@@ -55,6 +55,7 @@ const providerFields = $("providerFields");
 const showLoginBtn = $("showLoginBtn");
 const showSignupBtn = $("showSignupBtn");
 const notificationPanel = $("notificationPanel");
+const globalSort = $("globalSort");
 
 function loadDB() {
   const db = JSON.parse(localStorage.getItem(DB_KEY) || "null") || structuredClone(seed);
@@ -92,6 +93,29 @@ function getSession() { return JSON.parse(localStorage.getItem(SESSION_KEY) || "
 function setSession(userId) { localStorage.setItem(SESSION_KEY, JSON.stringify({ userId })); }
 function clearSession() { localStorage.removeItem(SESSION_KEY); }
 function uid(prefix) { return `${prefix}-${Math.random().toString(36).slice(2, 9)}`; }
+
+function getServiceMinPrice(service) {
+  const tiers = Array.isArray(service?.tiers) ? service.tiers : [];
+  const minTier = tiers.reduce((min, tier) => Math.min(min, Number(tier.minPrice) || Infinity), Infinity);
+  return Number.isFinite(minTier) ? minTier : 0;
+}
+
+function getCustomerBookingSummary(db, customerId) {
+  const bookings = db.bookings.filter((booking) => booking.customerId === customerId);
+  return {
+    total: bookings.length,
+    active: bookings.filter((booking) => ["Pending", "Accepted", "Job Started", "Job Finished", "Countered", "Awaiting Delivery Confirmation"].includes(booking.status)).length,
+    delivered: bookings.filter((booking) => booking.status === "Delivered").length,
+    unread: getCustomerUnreadChatCount(db, customerId),
+  };
+}
+
+function isFutureBooking(dateText, timeText) {
+  if (!dateText || !timeText) return false;
+  const slot = new Date(`${dateText}T${timeText}`);
+  if (Number.isNaN(slot.getTime())) return false;
+  return slot.getTime() > Date.now();
+}
 
 function providerRating(db, providerId) {
   const providerReviews = db.reviews.filter((r) => r.providerId === providerId);
@@ -165,12 +189,15 @@ function renderCustomer(db, user) {
 
   const searchInput = $("globalSearch");
   const categorySelect = $("globalCategory");
+  const sortSelect = globalSort;
   const categories = [...new Set(providers.map((p) => p.category).filter(Boolean))];
   categorySelect.innerHTML = ['<option value="">All Categories</option>', ...categories.map((category) => `<option>${category}</option>`)].join("");
 
   const drawMarketplace = () => {
     const q = searchInput.value.trim().toLowerCase();
     const chosenCategory = categorySelect.value;
+    const sortMode = sortSelect?.value || "recommended";
+    const summary = getCustomerBookingSummary(db, user.id);
     const serviceCards = db.catalog
       .map((service) => {
         const provider = providers.find((p) => p.id === service.providerId);
@@ -178,18 +205,37 @@ function renderCustomer(db, user) {
       })
       .filter(Boolean)
       .filter(({ service, provider }) => {
-        const matchesText = !q || service.itemName.toLowerCase().includes(q) || provider.name.toLowerCase().includes(q) || (service.itemDescription || "").toLowerCase().includes(q);
+        const matchesText = !q || service.itemName.toLowerCase().includes(q) || provider.name.toLowerCase().includes(q) || (service.itemDescription || "").toLowerCase().includes(q) || (provider.location || "").toLowerCase().includes(q);
         const matchesCategory = !chosenCategory || provider.category === chosenCategory;
         return matchesText && matchesCategory;
+      })
+      .sort((left, right) => {
+        const leftRating = providerRating(db, left.provider.id);
+        const rightRating = providerRating(db, right.provider.id);
+        const leftReviews = db.reviews.filter((r) => r.providerId === left.provider.id).length;
+        const rightReviews = db.reviews.filter((r) => r.providerId === right.provider.id).length;
+        const leftPrice = getServiceMinPrice(left.service);
+        const rightPrice = getServiceMinPrice(right.service);
+
+        if (sortMode === "price-asc") return leftPrice - rightPrice;
+        if (sortMode === "price-desc") return rightPrice - leftPrice;
+        if (sortMode === "rating-desc") return rightRating - leftRating || rightReviews - leftReviews;
+        if (sortMode === "reviews-desc") return rightReviews - leftReviews || rightRating - leftRating;
+        return rightRating - leftRating || rightReviews - leftReviews || leftPrice - rightPrice;
       });
 
     target.innerHTML = `
       <h2>Find Sellers & Services</h2>
+      <div class="summary-strip">
+        <article class="summary-card"><p class="label">Active orders</p><p class="value">${summary.active}</p></article>
+        <article class="summary-card"><p class="label">Delivered orders</p><p class="value">${summary.delivered}</p></article>
+        <article class="summary-card"><p class="label">Unread updates</p><p class="value">${summary.unread}</p></article>
+        <article class="summary-card"><p class="label">Total orders</p><p class="value">${summary.total}</p></article>
+      </div>
       <div class="products-grid">
         ${serviceCards.map(({ service, provider }) => {
           const reviewCount = db.reviews.filter((r) => r.providerId === provider.id).length;
-          const tiers = Array.isArray(service.tiers) ? service.tiers : [];
-          const minTier = tiers.reduce((min, tier) => Math.min(min, Number(tier.minPrice) || Infinity), Infinity);
+          const minTier = getServiceMinPrice(service);
           return `
             <article class="product-card">
               <h4>${service.itemName}</h4>
@@ -347,6 +393,7 @@ function renderCustomer(db, user) {
       <button id="backToSeller" class="ghost">← Back to seller profile</button>
       <h2>Order from ${provider.name}</h2>
       <p class="muted">Select date/time and propose a price in seller range.</p>
+      <p class="inline-message">Tip: booking time must be in the future, and sellers can still renegotiate before accepting.</p>
       <form id="orderForm" class="stack">
         <label>Service package
           <select id="tierSelect">${(service.tiers || []).map((tier, index) => `<option value="${index}">${tier.name} (₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()})</option>`).join("")}</select>
@@ -417,6 +464,11 @@ function renderCustomer(db, user) {
         return;
       }
 
+      if (!isFutureBooking(date, time)) {
+        alert("Please choose a booking time in the future.");
+        return;
+      }
+
       db.bookings.push({
         id: uid("book"),
         customerId: user.id,
@@ -484,6 +536,7 @@ function renderCustomer(db, user) {
   };
   searchInput.oninput = () => viewMode === "marketplace" && renderView();
   categorySelect.onchange = () => viewMode === "marketplace" && renderView();
+  if (sortSelect) sortSelect.onchange = () => viewMode === "marketplace" && renderView();
 
   renderView();
 }
@@ -857,15 +910,14 @@ signupForm.addEventListener("submit", (event) => {
     });
   }
 
-  db.users.push(user);
-  saveDB(db);
-
   const otp = prompt("Enter OTP sent to email/phone (use 123456)");
   if (otp !== "123456") {
-    alert("Invalid OTP");
+    alert("Invalid OTP. Account was not created.");
     return;
   }
 
+  db.users.push(user);
+  saveDB(db);
   setSession(user.id);
   signupForm.reset();
   providerFields.classList.add("hidden");

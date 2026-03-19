@@ -7,12 +7,13 @@ A mobile-first single-page web app prototype for **Hermes Hub**, a trusted local
 - Multi-role onboarding and login simulation (Customer / Provider / Admin)
 - Email/phone OTP simulation (`123456`)
 - Provider KYC submission + admin approve/reject workflow
-- Customer search by category and location
+- Customer search by category, location keyword, and marketplace sort options
 - Provider profile cards with ratings, reviews, completion rate, and availability
-- Booking creation with date/time + lifecycle statuses
+- Booking creation with future date/time validation + lifecycle statuses
 - Secure payment simulation with transaction states (`Held` -> `Released`)
 - Provider dashboard for availability, bookings, ratings, workload, and earnings
 - Customer review system (1-5 stars + comment)
+- Customer order summary cards for active, delivered, unread, and total orders
 - Admin console for KYC and transaction monitoring
 
 ## Run locally
